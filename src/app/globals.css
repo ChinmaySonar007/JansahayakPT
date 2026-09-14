@@ -43,3 +43,10 @@ h1, h2, h3, .font-display {
 .ledger-rule {
   border-bottom: 1px solid var(--paper-line);
 }
+
+/* Hide Next.js dev indicator in bottom left */
+nextjs-portal,
+[data-nextjs-toast],
+[data-nextjs-dev-tools-button] {
+  display: none !important;
+}

@@ -5,7 +5,14 @@ import { LanguageProvider } from "@/lib/language-context";
 
 export const metadata: Metadata = {
   title: "JanSahayak — Cooperative Gig Services",
-  description: "SIH26089 prototype — FoursPush",
+  description: "SIH26089 prototype — Cooperative Gig Platform with Rotational Equity",
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
