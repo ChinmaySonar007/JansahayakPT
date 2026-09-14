@@ -14,7 +14,7 @@ type EShramModalProps = {
     uanNumber?: string;
     ncoCode?: string;
     certifications?: string[];
-    priceTier?: string;
+    priceTier?: "Standard" | "Senior" | "Master Craftsman";
     areaLabel?: string;
   };
   onClose: () => void;

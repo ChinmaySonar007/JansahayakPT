@@ -50,11 +50,12 @@ type Inbox = {
     skills?: string[];
     experienceYears?: number;
     certifications?: string[];
-    priceTier?: string;
+    priceTier?: "Standard" | "Senior" | "Master Craftsman";
     hourlyFloor?: number;
     uanNumber?: string;
     ncoCode?: string;
     areaLabel?: string;
+    phone?: string;
     dutyStatus?: "available" | "upskilling" | "off_duty";
   };
   pendingJob: {

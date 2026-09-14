@@ -53,17 +53,18 @@ export async function POST(req: Request) {
       offerToNextCandidate(job.id, { lat: consumer.lat, lng: consumer.lng });
       const workerId = job.currentOfferWorkerId || store.workers[0].id;
       respondToOffer(job.id, workerId, true);
-      const completion = completeJob(job.id);
+      const completedJob = completeJob(job.id);
       const worker = store.workers.find((w) => w.id === workerId);
+      const transaction = store.transactions.find((t) => t.jobId === job.id);
 
       return NextResponse.json({
         success: true,
         scenario: "escrow_settlement",
-        job: completion?.job,
-        transaction: completion?.transaction,
+        job: completedJob,
+        transaction,
         worker,
         title: "1.5% Escrow Split & Payout Settled",
-        message: `Job #${job.id.slice(-4)} finished! ₹${completion?.transaction?.workerPayout} (98.5%) sent to ${worker?.name}'s UPI, ₹${completion?.transaction?.welfareFee} (1.5%) added to Cooperative Welfare Reserve, ₹0.00 platform fee.`,
+        message: `Job #${job.id.slice(-4)} finished! ₹${transaction?.workerPayout} (98.5%) sent to ${worker?.name}'s UPI, ₹${transaction?.welfareFee} (1.5%) added to Cooperative Welfare Reserve, ₹0.00 platform fee.`,
       });
     }
 

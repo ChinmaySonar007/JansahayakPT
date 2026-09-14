@@ -44,7 +44,7 @@ type Summary = {
   }[];
   workers: (Worker & {
     skills?: string[];
-    priceTier?: string;
+    priceTier?: "Standard" | "Senior" | "Master Craftsman";
     hourlyFloor?: number;
     experienceYears?: number;
   })[];

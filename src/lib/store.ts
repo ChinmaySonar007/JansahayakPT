@@ -1,4 +1,4 @@
-import type { Category, Cooperative, Worker, Consumer, Job, Transaction, WelfareGrant, SosAlert } from "./types";
+import type { Category, Cooperative, Worker, Consumer, Job, Transaction, WelfareGrant, SosAlert, WhatsAppMessage } from "./types";
 
 // ---- Seed reference data -------------------------------------------------
 

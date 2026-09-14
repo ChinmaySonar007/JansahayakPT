@@ -29,7 +29,7 @@ type Candidate = {
   skillMatchPercent?: number;
   matchedSkills?: string[];
   aiMatchReason?: string;
-  priceTier?: string;
+  priceTier?: "Standard" | "Senior" | "Master Craftsman" | string;
   hourlyFloor?: number;
   breakdown?: {
     proximity: number;
