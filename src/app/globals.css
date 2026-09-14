@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f6f1e6;
+  --paper-line: #e2d8c2;
+  --ink: #24261f;
+  --ink-soft: #5a5c4f;
+  --teal: #1f4b43;
+  --teal-deep: #143530;
+  --marigold: #e2a13a;
+  --marigold-deep: #b5791f;
+  --terracotta: #b5482f;
+  --terracotta-soft: #f1d9d0;
+  --font-display: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-line: var(--paper-line);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-teal: var(--teal);
+  --color-teal-deep: var(--teal-deep);
+  --color-marigold: var(--marigold);
+  --color-marigold-deep: var(--marigold-deep);
+  --color-terracotta: var(--terracotta);
+  --color-terracotta-soft: var(--terracotta-soft);
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+}
+
+.ledger-rule {
+  border-bottom: 1px solid var(--paper-line);
+}
