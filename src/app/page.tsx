@@ -41,6 +41,7 @@ type Candidate = {
 };
 type Job = {
   id: string;
+  consumerId?: string | null;
   status: string;
   amount: number;
   categoryId: string;
