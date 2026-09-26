@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Nav from "@/components/Nav";
 import { useAuth } from "@/lib/auth-context";
 import { useLanguage } from "@/lib/language-context";
@@ -142,6 +142,85 @@ export default function WorkerPage() {
   const [showWebhookGuide, setShowWebhookGuide] = useState(false);
   const [copiedCurl, setCopiedCurl] = useState(false);
 
+  // Robust Chat Scrolling Refs & State
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isUserScrolledUpRef = useRef(false);
+  const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
+  const prevMessagesLengthRef = useRef(0);
+  const prevPendingJobIdRef = useRef<string | null>(null);
+  const prevActiveJobIdRef = useRef<string | null>(null);
+  const isFirstLoadRef = useRef(true);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    if (behavior === "auto") {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, []);
+
+  const handleChatScroll = useCallback(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    // Calculate distance from bottom
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    // User is considered scrolled up if more than 35px from bottom
+    const isScrolledUp = distanceToBottom > 35;
+    isUserScrolledUpRef.current = isScrolledUp;
+    setShowScrollBottomBtn(isScrolledUp);
+  }, []);
+
+  // When switching worker, scroll instantly to bottom
+  useEffect(() => {
+    isUserScrolledUpRef.current = false;
+    setShowScrollBottomBtn(false);
+    prevMessagesLengthRef.current = 0;
+    prevPendingJobIdRef.current = null;
+    prevActiveJobIdRef.current = null;
+    isFirstLoadRef.current = true;
+
+    const t = setTimeout(() => {
+      scrollToBottom("auto");
+    }, 60);
+    return () => clearTimeout(t);
+  }, [workerId, scrollToBottom]);
+
+  // When messages or jobs update, only scroll if there's actually a new item and user is not scrolled up
+  useEffect(() => {
+    const newLength = chatMessages.length;
+    const pendingJobId = inbox?.pendingJob?.id || null;
+    const activeJobId = inbox?.activeJob?.id || null;
+
+    const hasNewMessage = newLength > prevMessagesLengthRef.current;
+    const hasNewOffer = pendingJobId !== null && pendingJobId !== prevPendingJobIdRef.current;
+    const hasNewActiveJob = activeJobId !== null && activeJobId !== prevActiveJobIdRef.current;
+
+    prevMessagesLengthRef.current = newLength;
+    prevPendingJobIdRef.current = pendingJobId;
+    prevActiveJobIdRef.current = activeJobId;
+
+    if (isFirstLoadRef.current && newLength > 0) {
+      isFirstLoadRef.current = false;
+      scrollToBottom("auto");
+      return;
+    }
+
+    // Never auto-scroll during routine polling if nothing new has arrived
+    if (hasNewMessage || hasNewOffer || hasNewActiveJob) {
+      if (!isUserScrolledUpRef.current) {
+        requestAnimationFrame(() => {
+          scrollToBottom("smooth");
+        });
+      }
+    }
+  }, [chatMessages, inbox?.pendingJob?.id, inbox?.activeJob?.id, scrollToBottom]);
+
   // New SIH Winning Feature Modal States
   const [showSosModal, setShowSosModal] = useState(false);
   const [showEShramModal, setShowEShramModal] = useState(false);
@@ -195,7 +274,21 @@ export default function WorkerPage() {
       if (!res.ok) return;
       const data = await res.json();
       if (data && data.worker) {
-        setInbox(data);
+        setInbox((prev) => {
+          if (!prev) return data;
+          if (
+            prev.worker.id === data.worker.id &&
+            prev.worker.walletBalance === data.worker.walletBalance &&
+            prev.worker.dutyStatus === data.worker.dutyStatus &&
+            prev.worker.upskilling === data.worker.upskilling &&
+            prev.pendingJob?.id === data.pendingJob?.id &&
+            prev.activeJob?.id === data.activeJob?.id &&
+            prev.recentCompleted.length === data.recentCompleted.length
+          ) {
+            return prev;
+          }
+          return data;
+        });
       }
     } catch (e) {
       console.error("Failed to fetch inbox", e);
@@ -209,7 +302,15 @@ export default function WorkerPage() {
       if (!res.ok) return;
       const data = await res.json();
       if (data?.messages) {
-        setChatMessages(data.messages);
+        setChatMessages((prev) => {
+          if (prev.length === data.messages.length) {
+            const isIdentical = prev.every(
+              (m, idx) => m.id === data.messages[idx]?.id && m.text === data.messages[idx]?.text
+            );
+            if (isIdentical) return prev;
+          }
+          return data.messages;
+        });
       }
     } catch (e) {
       console.error("Failed to load WhatsApp messages", e);
@@ -229,6 +330,8 @@ export default function WorkerPage() {
   async function sendChatMessage(text: string) {
     if (!text.trim() || !workerId) return;
     setIsSendingChat(true);
+    isUserScrolledUpRef.current = false;
+    setShowScrollBottomBtn(false);
     try {
       await fetch(
         `/api/webhooks/whatsapp?workerId=${encodeURIComponent(workerId)}&body=${encodeURIComponent(text.trim())}&lang=${lang}`
@@ -237,6 +340,7 @@ export default function WorkerPage() {
       await fetchChatMessages(workerId);
       refresh(workerId);
       loadWorkers();
+      setTimeout(() => scrollToBottom("smooth"), 50);
     } catch (e) {
       console.error("Failed to send WhatsApp message", e);
     } finally {
@@ -694,105 +798,131 @@ export default function WorkerPage() {
                     </div>
 
                     {/* WhatsApp Chat Body */}
-                    <div className="p-3 space-y-2.5 max-h-72 overflow-y-auto bg-[radial-gradient(#075e54_0.75px,transparent_0.75px)] [background-size:16px_16px] bg-[#ECE5DD]">
-                      {/* Bot Welcome Bubble */}
-                      <div className="max-w-[88%] bg-white rounded-lg rounded-tl-xs p-2.5 shadow-2xs text-xs text-ink leading-relaxed">
-                        <p className="font-semibold text-[#075E54] text-[11px] mb-0.5">JanSahayak PACS Ernakulam</p>
-                        <p>
-                          Namaste {inbox.worker.name}! Welcome to JanSahayak Cooperative Dispatch. When a gig is booked in your cluster, you will receive an instant prompt here or on your registered mobile.
-                        </p>
-                        <span className="text-[9px] text-ink-soft float-right mt-1">10:00 AM</span>
+                    <div className="relative">
+                      <div
+                        ref={chatContainerRef}
+                        onScroll={handleChatScroll}
+                        className="p-3.5 space-y-2.5 h-[380px] sm:h-[420px] overflow-y-auto overscroll-contain bg-[radial-gradient(#075e54_0.75px,transparent_0.75px)] [background-size:16px_16px] bg-[#ECE5DD]"
+                        style={{ scrollbarWidth: "thin", scrollbarColor: "#128C7E transparent" }}
+                      >
+                        {/* Bot Welcome Bubble */}
+                        <div className="max-w-[88%] bg-white rounded-lg rounded-tl-xs p-2.5 shadow-2xs text-xs text-ink leading-relaxed">
+                          <p className="font-semibold text-[#075E54] text-[11px] mb-0.5">JanSahayak PACS Ernakulam</p>
+                          <p>
+                            Namaste {inbox.worker.name}! Welcome to JanSahayak Cooperative Dispatch. When a gig is booked in your cluster, you will receive an instant prompt here or on your registered mobile.
+                          </p>
+                          <span className="text-[9px] text-ink-soft float-right mt-1">10:00 AM</span>
+                        </div>
+
+                        {/* Chat Messages */}
+                        {chatMessages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={`flex ${msg.from === "worker" ? "justify-end" : "justify-start"}`}
+                          >
+                            <div
+                              className={`max-w-[88%] p-2.5 shadow-2xs text-xs leading-relaxed whitespace-pre-line ${
+                                msg.from === "worker"
+                                  ? "bg-[#DCF8C6] text-ink rounded-lg rounded-tr-xs"
+                                  : "bg-white text-ink rounded-lg rounded-tl-xs"
+                              }`}
+                            >
+                              {msg.from === "bot" && (
+                                <p className="font-semibold text-[#075E54] text-[11px] mb-0.5">JanSahayak Dispatch</p>
+                              )}
+                              <p>{msg.text}</p>
+                              <div className="flex items-center justify-end gap-1 text-[9px] text-ink-soft mt-1">
+                                <span>
+                                  {new Date(msg.timestamp).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+                                {msg.from === "worker" && <span className="text-blue-500 font-bold">✓✓</span>}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Pending Job Prompt Card */}
+                        {inbox.pendingJob && (
+                          <div className="bg-white rounded-xl p-3 border-l-4 border-[#128C7E] shadow-2xs text-xs space-y-1.5">
+                            <div className="flex items-center justify-between text-[#075E54] font-bold text-[11px]">
+                              <span>{MESSAGES[lang].incoming}</span>
+                              <span className="text-marigold-deep bg-marigold/20 px-1.5 py-0.5 rounded text-[10px]">
+                                Turn Match
+                              </span>
+                            </div>
+                            <p className="font-semibold text-ink">{inbox.pendingJob.categoryName} at Kochi</p>
+                            {inbox.pendingJob.selectedSkill && (
+                              <div className="text-[11px] text-teal-deep font-semibold bg-teal/10 px-2 py-0.5 rounded border border-teal/20">
+                                🎯 AI Matched for Task: {inbox.pendingJob.selectedSkill}
+                              </div>
+                            )}
+                            {inbox.pendingJob.aiMatchReason && (
+                              <p className="text-[10px] text-ink-soft italic">
+                                {inbox.pendingJob.aiMatchReason}
+                              </p>
+                            )}
+                            <p className="text-ink-soft">
+                              Fixed Rate: ₹{inbox.pendingJob.amount} · Payout: ₹{(inbox.pendingJob.amount * 0.985).toFixed(2)}
+                            </p>
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                onClick={() => sendChatMessage("1")}
+                                className="flex-1 rounded-full bg-[#075E54] hover:bg-[#128C7E] text-white font-bold text-[11px] py-1.5 shadow-2xs transition-all cursor-pointer"
+                              >
+                                Reply &apos;1&apos; (Accept)
+                              </button>
+                              <button
+                                onClick={() => sendChatMessage("2")}
+                                className="flex-1 rounded-full border border-paper-line bg-gray-100 hover:bg-gray-200 text-ink-soft text-[11px] py-1.5 transition-all cursor-pointer"
+                              >
+                                Reply &apos;2&apos; (Decline)
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Active Job Card */}
+                        {inbox.activeJob && (
+                          <div className="bg-amber-50 rounded-xl p-3 border-l-4 border-marigold shadow-2xs text-xs space-y-1.5">
+                            <div className="flex items-center justify-between text-teal-deep font-bold text-[11px]">
+                              <span>⚡ Assignment In Progress</span>
+                              <span className="text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded text-[10px]">
+                                Active
+                              </span>
+                            </div>
+                            <p className="font-semibold text-ink">
+                              {inbox.activeJob.categoryName} · ₹{inbox.activeJob.amount}
+                            </p>
+                            <button
+                              onClick={() => sendChatMessage("DONE")}
+                              className="w-full rounded-full bg-marigold hover:bg-marigold-deep text-teal-deep font-bold text-[11px] py-1.5 shadow-2xs transition-all flex items-center justify-center gap-1 cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Reply &apos;DONE&apos; to Complete
+                            </button>
+                          </div>
+                        )}
+
+                        <div ref={messagesEndRef} className="h-0.5" />
                       </div>
 
-                      {/* Chat Messages */}
-                      {chatMessages.map((msg) => (
-                        <div
-                          key={msg.id}
-                          className={`flex ${msg.from === "worker" ? "justify-end" : "justify-start"}`}
+                      {/* WhatsApp-style floating "Scroll to bottom" button */}
+                      {showScrollBottomBtn && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            isUserScrolledUpRef.current = false;
+                            setShowScrollBottomBtn(false);
+                            scrollToBottom("smooth");
+                          }}
+                          className="absolute bottom-3 right-3 bg-[#075E54] hover:bg-[#128C7E] text-white py-1.5 px-3 rounded-full shadow-lg border border-emerald-400/40 transition-all animate-in fade-in zoom-in-95 cursor-pointer flex items-center gap-1 text-[11px] font-semibold z-10"
+                          title="Scroll to latest messages"
                         >
-                          <div
-                            className={`max-w-[88%] p-2.5 shadow-2xs text-xs leading-relaxed whitespace-pre-line ${
-                              msg.from === "worker"
-                                ? "bg-[#DCF8C6] text-ink rounded-lg rounded-tr-xs"
-                                : "bg-white text-ink rounded-lg rounded-tl-xs"
-                            }`}
-                          >
-                            {msg.from === "bot" && (
-                              <p className="font-semibold text-[#075E54] text-[11px] mb-0.5">JanSahayak Dispatch</p>
-                            )}
-                            <p>{msg.text}</p>
-                            <div className="flex items-center justify-end gap-1 text-[9px] text-ink-soft mt-1">
-                              <span>
-                                {new Date(msg.timestamp).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </span>
-                              {msg.from === "worker" && <span className="text-blue-500 font-bold">✓✓</span>}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-
-                      {/* Pending Job Prompt Card */}
-                      {inbox.pendingJob && (
-                        <div className="bg-white rounded-xl p-3 border-l-4 border-[#128C7E] shadow-2xs text-xs space-y-1.5">
-                          <div className="flex items-center justify-between text-[#075E54] font-bold text-[11px]">
-                            <span>{MESSAGES[lang].incoming}</span>
-                            <span className="text-marigold-deep bg-marigold/20 px-1.5 py-0.5 rounded text-[10px]">
-                              Turn Match
-                            </span>
-                          </div>
-                          <p className="font-semibold text-ink">{inbox.pendingJob.categoryName} at Kochi</p>
-                          {inbox.pendingJob.selectedSkill && (
-                            <div className="text-[11px] text-teal-deep font-semibold bg-teal/10 px-2 py-0.5 rounded border border-teal/20">
-                              🎯 AI Matched for Task: {inbox.pendingJob.selectedSkill}
-                            </div>
-                          )}
-                          {inbox.pendingJob.aiMatchReason && (
-                            <p className="text-[10px] text-ink-soft italic">
-                              {inbox.pendingJob.aiMatchReason}
-                            </p>
-                          )}
-                          <p className="text-ink-soft">
-                            Fixed Rate: ₹{inbox.pendingJob.amount} · Payout: ₹{(inbox.pendingJob.amount * 0.985).toFixed(2)}
-                          </p>
-                          <div className="flex gap-2 pt-1">
-                            <button
-                              onClick={() => sendChatMessage("1")}
-                              className="flex-1 rounded-full bg-[#075E54] hover:bg-[#128C7E] text-white font-bold text-[11px] py-1.5 shadow-2xs transition-all cursor-pointer"
-                            >
-                              Reply &apos;1&apos; (Accept)
-                            </button>
-                            <button
-                              onClick={() => sendChatMessage("2")}
-                              className="flex-1 rounded-full border border-paper-line bg-gray-100 hover:bg-gray-200 text-ink-soft text-[11px] py-1.5 transition-all cursor-pointer"
-                            >
-                              Reply &apos;2&apos; (Decline)
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Active Job Card */}
-                      {inbox.activeJob && (
-                        <div className="bg-amber-50 rounded-xl p-3 border-l-4 border-marigold shadow-2xs text-xs space-y-1.5">
-                          <div className="flex items-center justify-between text-teal-deep font-bold text-[11px]">
-                            <span>⚡ Assignment In Progress</span>
-                            <span className="text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded text-[10px]">
-                              Active
-                            </span>
-                          </div>
-                          <p className="font-semibold text-ink">
-                            {inbox.activeJob.categoryName} · ₹{inbox.activeJob.amount}
-                          </p>
-                          <button
-                            onClick={() => sendChatMessage("DONE")}
-                            className="w-full rounded-full bg-marigold hover:bg-marigold-deep text-teal-deep font-bold text-[11px] py-1.5 shadow-2xs transition-all flex items-center justify-center gap-1 cursor-pointer"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Reply &apos;DONE&apos; to Complete
-                          </button>
-                        </div>
+                          <ChevronDown className="w-3.5 h-3.5" />
+                          <span>Latest</span>
+                        </button>
                       )}
                     </div>
 
