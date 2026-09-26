@@ -4,12 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useLanguage, type Language } from "@/lib/language-context";
-import { User, LogOut, Languages } from "lucide-react";
+import { User, LogOut, Languages, Type } from "lucide-react";
+import { useFontSize } from "@/lib/font-size-context";
 
 export default function Nav() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const { language, setLanguage, t } = useLanguage();
+  const { fontSize, setFontSize, currentPercentage } = useFontSize();
 
   const links = [
     { href: "/", label: t.nav.consumer },
@@ -58,6 +60,75 @@ export default function Nav() {
               <option value="hi">हिन्दी (HI)</option>
               <option value="ml">മലയാളം (ML)</option>
             </select>
+          </div>
+
+          {/* Font Size Accessibility Controller */}
+          <div
+            className="flex items-center bg-white/80 border border-paper-line rounded-full px-2 py-0.5 shadow-2xs hover:border-teal/50 transition-colors"
+            role="group"
+            aria-label={t.nav.fontSize || "Font Size"}
+          >
+            <div className="hidden lg:flex items-center gap-1 pr-1.5 mr-1 border-r border-paper-line text-[10px] font-bold text-teal tracking-tighter uppercase select-none">
+              <Type className="w-3 h-3 text-teal shrink-0" />
+              <span>{currentPercentage}</span>
+            </div>
+            <div className="lg:hidden flex items-center pr-1 mr-1 border-r border-paper-line text-teal select-none">
+              <Type className="w-3 h-3 text-teal shrink-0" />
+            </div>
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => setFontSize("sm")}
+                title={t.nav.fontSizeSmall || "Small font (90%)"}
+                aria-label={t.nav.fontSizeSmall || "Small font (90%)"}
+                className={`px-1.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                  fontSize === "sm"
+                    ? "bg-teal text-paper shadow-2xs scale-105"
+                    : "text-ink-soft hover:text-ink hover:bg-black/5"
+                }`}
+              >
+                A-
+              </button>
+              <button
+                type="button"
+                onClick={() => setFontSize("base")}
+                title={t.nav.fontSizeNormal || "Default font (100%)"}
+                aria-label={t.nav.fontSizeNormal || "Default font (100%)"}
+                className={`px-1.5 py-0.5 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                  fontSize === "base"
+                    ? "bg-teal text-paper shadow-2xs scale-105"
+                    : "text-ink-soft hover:text-ink hover:bg-black/5"
+                }`}
+              >
+                A
+              </button>
+              <button
+                type="button"
+                onClick={() => setFontSize("lg")}
+                title={t.nav.fontSizeLarge || "Large font (115%)"}
+                aria-label={t.nav.fontSizeLarge || "Large font (115%)"}
+                className={`px-1.5 py-0.5 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                  fontSize === "lg"
+                    ? "bg-teal text-paper shadow-2xs scale-105"
+                    : "text-ink-soft hover:text-ink hover:bg-black/5"
+                }`}
+              >
+                A+
+              </button>
+              <button
+                type="button"
+                onClick={() => setFontSize("xl")}
+                title={t.nav.fontSizeExtraLarge || "Extra large font (130%)"}
+                aria-label={t.nav.fontSizeExtraLarge || "Extra large font (130%)"}
+                className={`px-1.5 py-0.5 text-xs font-extrabold rounded-full transition-all cursor-pointer ${
+                  fontSize === "xl"
+                    ? "bg-teal text-paper shadow-2xs scale-105"
+                    : "text-ink-soft hover:text-ink hover:bg-black/5"
+                }`}
+              >
+                A++
+              </button>
+            </div>
           </div>
           {user ? (
             <div className="flex items-center gap-2 bg-white/70 border border-paper-line px-2.5 py-1 rounded-full shadow-2xs">

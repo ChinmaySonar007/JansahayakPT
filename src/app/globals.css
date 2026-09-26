@@ -44,6 +44,21 @@ h1, h2, h3, .font-display {
   border-bottom: 1px solid var(--paper-line);
 }
 
+html {
+  transition: font-size 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Accessibility: scale micro-labels when enlarged so they remain easy to read */
+html[data-font-size="lg"] .text-\[10px\],
+html[data-font-size="lg"] .text-\[11px\] {
+  font-size: 0.75rem;
+}
+
+html[data-font-size="xl"] .text-\[10px\],
+html[data-font-size="xl"] .text-\[11px\] {
+  font-size: 0.825rem;
+}
+
 /* Hide Next.js dev indicator in bottom left */
 nextjs-portal,
 [data-nextjs-toast],

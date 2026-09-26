@@ -12,7 +12,7 @@ import EscrowReceiptModal from "@/components/EscrowReceiptModal";
 import {
   Zap, Droplet, Hammer, Paintbrush, Home as HomeIcon,
   HeartHandshake, Sprout, Sparkles, MapPin, Star, Clock, ShieldCheck,
-  Radio, FileText, CheckCircle2, ArrowRight,
+  Radio, FileText, CheckCircle2, ArrowRight, Phone, Shield, X, Award, UserCheck,
 } from "lucide-react";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -67,6 +67,7 @@ export default function ConsumerPage() {
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const [issueQuery, setIssueQuery] = useState("");
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [allWorkers, setAllWorkers] = useState<Worker[]>([]);
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -76,9 +77,35 @@ export default function ConsumerPage() {
   const [receiptJob, setReceiptJob] = useState<Job | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
 
+  // Initial data load: Categories, All Workers, and check for active in-flight jobs
   useEffect(() => {
-    fetch("/api/categories").then((r) => r.json()).then((d) => setCategories(d.categories));
-  }, []);
+    fetch("/api/categories")
+      .then((r) => r.json())
+      .then((d) => setCategories(d.categories || []));
+
+    fetch("/api/workers")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.workers) setAllWorkers(d.workers);
+      });
+
+    fetch("/api/jobs")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.jobs && d.jobs.length > 0) {
+          const activeJob = d.jobs.find(
+            (j: Job) =>
+              (j.status === "matching" || j.status === "offered" || j.status === "accepted") &&
+              (j.consumerId === activeConsumerId || !j.consumerId)
+          );
+          if (activeJob) {
+            setJob(activeJob);
+            setSelectedCategory(activeJob.categoryId);
+          }
+        }
+      })
+      .catch(console.error);
+  }, [activeConsumerId]);
 
   const loadCandidates = useCallback(async (categoryId: string, skill?: string | null, query?: string) => {
     const activeSkill = skill !== undefined ? skill : selectedSkill;
@@ -158,6 +185,8 @@ export default function ConsumerPage() {
   }
 
   const category = categories.find((c) => c.id === selectedCategory);
+  const selectedCandidate = candidates.find((c) => c.worker.id === selectedWorkerId);
+  const selectedWorker = selectedCandidate?.worker || allWorkers.find((w) => w.id === selectedWorkerId) || null;
 
   return (
     <div className="flex-1 flex flex-col">
@@ -179,7 +208,165 @@ export default function ConsumerPage() {
               job={job}
               onReset={() => setJob(null)}
               onOpenReceipt={(j) => setReceiptJob(j)}
+              onOpenEShram={(w) => setSelectedWorkerForEShram(w)}
+              allWorkers={allWorkers}
+              candidates={candidates}
             />
+          </div>
+        )}
+
+        {/* Selected Cooperative Worker Dashboard Reflection Card */}
+        {selectedWorker && (!job || job.status === "completed" || job.status === "no_match") && (
+          <div className="mb-8 rounded-2xl border-2 border-teal/40 bg-gradient-to-br from-teal/[0.08] via-white to-marigold/[0.06] p-5 shadow-md animate-in fade-in slide-in-from-top-3 duration-300">
+            <div className="flex items-center justify-between pb-3 border-b border-paper-line/70 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2.5 w-2.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <span className="text-xs uppercase font-bold tracking-wider text-teal-deep">
+                  🎯 {t.consumer.selectedWorkerTitle || "Selected Cooperative Worker for Booking"}
+                </span>
+                <span className="text-[10px] font-semibold text-teal bg-teal/15 px-2 py-0.5 rounded-full border border-teal/30">
+                  Ready to Dispatch
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedWorkerId(null)}
+                className="text-xs text-ink-soft hover:text-terracotta flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                title="Deselect this worker and return to automatic fair rotation"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>{t.consumer.deselectWorker || "Clear Selection"}</span>
+              </button>
+            </div>
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              {/* Worker Identity & Badges */}
+              <div className="flex items-start gap-3.5">
+                <div className="relative">
+                  <div className="w-14 h-14 rounded-2xl bg-teal text-white flex items-center justify-center font-bold text-xl shadow-xs ring-2 ring-teal/30">
+                    {selectedWorker.name.charAt(0)}
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-2xs border border-teal/30">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 fill-emerald-100" />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-bold text-base text-ink flex items-center gap-1.5">
+                      {selectedWorker.name}
+                    </h3>
+                    <span className="text-[11px] font-semibold text-teal-deep bg-teal/10 px-2 py-0.5 rounded-md border border-teal/20">
+                      {selectedCandidate?.priceTier || selectedWorker.priceTier || "Master Craftsman"}
+                    </span>
+                    <span className="text-xs text-ink-soft">
+                      · {selectedWorker.experienceYears || (selectedCandidate?.priceTier === "Master Craftsman" ? 12 : 7)} yrs exp
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-ink-soft flex items-center gap-1">
+                    <span>🏛️</span>
+                    <span className="font-medium text-teal-deep">Ernakulam District Labour Cooperative Society</span>
+                    <span>(PACS Member)</span>
+                  </p>
+
+                  {/* Trust Metrics Pill Row */}
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-ink-soft pt-1">
+                    <span className="flex items-center gap-1 font-semibold text-ink">
+                      <Star className="w-3.5 h-3.5 fill-marigold text-marigold" />
+                      {selectedWorker.rating} / 5.0
+                      <span className="font-normal text-[11px] text-ink-soft">({selectedWorker.completedJobs} jobs)</span>
+                    </span>
+                    <span className="flex items-center gap-1 text-teal font-medium">
+                      <MapPin className="w-3.5 h-3.5" />
+                      {selectedCandidate ? `${selectedCandidate.distanceKm} km away` : "Nearby"}
+                      <span className="text-[11px] text-ink-soft font-normal">
+                        (~{selectedCandidate ? Math.round(selectedCandidate.distanceKm * 4 + 6) : 10} {t.consumer.mins || "mins"} arrival)
+                      </span>
+                    </span>
+                    <span className="flex items-center gap-1 text-teal-deep font-medium">
+                      <Clock className="w-3.5 h-3.5" />
+                      Idle: {selectedCandidate ? `${selectedCandidate.idleHours} hrs` : "Available"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Price & Primary Booking Actions */}
+              <div className="flex flex-col sm:flex-row md:flex-col items-start sm:items-center md:items-end justify-between md:justify-center gap-2 pt-3 md:pt-0 border-t md:border-t-0 border-paper-line/70 shrink-0">
+                <div className="text-left md:text-right">
+                  <div className="text-xs text-ink-soft">Protected Cooperative Rate</div>
+                  <div className="text-xl font-bold font-mono text-teal-deep">
+                    ₹{category?.baseRate || selectedCandidate?.hourlyFloor || selectedWorker.hourlyFloor || 249}
+                    <span className="text-xs font-sans text-ink-soft font-normal"> / fixed job</span>
+                  </div>
+                  <div className="text-[10px] text-emerald-700 font-medium">
+                    ✓ 98.5% Worker Livelihood · 1.5% Welfare Pool
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWorkerForEShram(selectedWorker)}
+                    className="px-3 py-2 rounded-xl bg-white border border-paper-line hover:border-teal text-teal-deep font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                    title="Inspect e-Shram & DigiLocker cryptographic badge"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-teal" />
+                    <span>e-Shram ID</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => category && book(category.id, selectedWorker.id)}
+                    disabled={loading || (!!job && job.status !== "completed" && job.status !== "no_match")}
+                    className="px-4 py-2 rounded-xl bg-teal hover:bg-teal-deep text-white font-semibold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <ArrowRight className="w-3.5 h-3.5 text-paper" />
+                    <span>
+                      {loading
+                        ? t.consumer.searchingWorker
+                        : `${t.consumer.confirmBookingFor || "Confirm & Book"} ${selectedWorker.name.split(" ")[0]}`}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Skill Match & Verifications row */}
+            <div className="mt-3.5 pt-3 border-t border-paper-line/70 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-ink-soft">Skills:</span>
+                {(selectedWorker.skills || (category?.skills ? category.skills.slice(0, 3) : [])).map((sk) => (
+                  <span
+                    key={sk}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-teal/10 text-teal-deep border border-teal/20 font-medium"
+                  >
+                    ✓ {sk}
+                  </span>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 text-[11px] text-ink-soft">
+                <span className="flex items-center gap-1 text-emerald-700 font-medium">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  e-Shram UAN: •••• •••• {selectedWorker.uanNumber ? selectedWorker.uanNumber.slice(-4) : "8921"}
+                </span>
+                <span>·</span>
+                <span className="text-teal-deep font-medium">
+                  DigiLocker Verified
+                </span>
+              </div>
+            </div>
+
+            {selectedCandidate?.aiMatchReason && (
+              <div className="mt-2.5 text-[11px] text-teal-deep bg-white/70 px-2.5 py-1.5 rounded-lg border border-teal/15 font-medium">
+                {selectedCandidate.aiMatchReason}
+              </div>
+            )}
           </div>
         )}
 
@@ -366,8 +553,8 @@ export default function ConsumerPage() {
                     const cand = candidates.find((c) => c.worker.id === w.id);
                     if (cand && cand.eligible) {
                       setSelectedWorkerId(w.id);
+                      window.scrollTo({ top: 120, behavior: "smooth" });
                     }
-                    setSelectedWorkerForEShram(w);
                   }}
                 />
               </div>
@@ -461,8 +648,9 @@ export default function ConsumerPage() {
                             <span className="text-xs font-bold text-ink-soft/70">#{index + 1}</span>
                             <span className="font-semibold text-sm text-ink">{c.worker.name}</span>
                             {isSelected && (
-                              <span className="text-[10px] bg-teal text-white font-bold px-2 py-0.5 rounded-full shadow-2xs">
-                                ✓ Your Choice
+                              <span className="text-[10px] bg-teal text-white font-bold px-2 py-0.5 rounded-full shadow-2xs flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-300" />
+                                <span>{t.consumer.currentlySelectedBadge || "Selected on Dashboard"}</span>
                               </span>
                             )}
                             <button
@@ -549,8 +737,12 @@ export default function ConsumerPage() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedWorkerId(c.worker.id);
-                              book(category.id, c.worker.id);
+                              if (isSelected) {
+                                book(category.id, c.worker.id);
+                              } else {
+                                setSelectedWorkerId(c.worker.id);
+                                window.scrollTo({ top: 120, behavior: "smooth" });
+                              }
                             }}
                             disabled={loading || (!!job && job.status !== "completed" && job.status !== "no_match")}
                             className={`mt-2 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-40 ${
@@ -610,6 +802,48 @@ export default function ConsumerPage() {
             onClose={() => setReceiptJob(null)}
           />
         )}
+        {/* Floating Quick Action Pill for Selected Worker */}
+        {selectedWorker && (!job || job.status === "completed" || job.status === "no_match") && (
+          <div className="fixed bottom-20 sm:bottom-16 left-1/2 -translate-x-1/2 z-30 w-[94%] max-w-xl animate-in slide-in-from-bottom-4 duration-200">
+            <div className="bg-stone-900/95 backdrop-blur-md text-white border border-teal/50 rounded-full px-4 py-2.5 shadow-2xl flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-teal text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-inner">
+                  {selectedWorker.name.charAt(0)}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold truncate flex items-center gap-1.5">
+                    <span>{selectedWorker.name}</span>
+                    <span className="text-amber-400 text-[11px] font-mono">⭐ {selectedWorker.rating}</span>
+                    <span className="text-[10px] text-teal-300 bg-teal-950/80 px-1.5 py-0.5 rounded border border-teal-800">
+                      {selectedCandidate?.priceTier || selectedWorker.priceTier || "Coop Member"}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-stone-300 truncate">
+                    {category?.name || "Service"} · ₹{category?.baseRate || selectedWorker.hourlyFloor || 249} fixed rate · {selectedCandidate ? `${selectedCandidate.distanceKm} km` : "Nearby"}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSelectedWorkerId(null)}
+                  className="text-stone-400 hover:text-stone-200 text-xs px-2 py-1 cursor-pointer transition-colors"
+                >
+                  {t.consumer.deselectWorker || "Clear"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => category && book(category.id, selectedWorker.id)}
+                  disabled={loading}
+                  className="bg-teal hover:bg-teal-deep text-white font-semibold text-xs px-3.5 py-1.5 rounded-full shadow-xs transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                >
+                  <span>{loading ? t.consumer.searchingWorker : (t.consumer.confirmBookingFor || "Confirm Book")}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
@@ -619,162 +853,260 @@ function JobTracker({
   job,
   onReset,
   onOpenReceipt,
+  onOpenEShram,
+  allWorkers = [],
+  candidates = [],
 }: {
   job: Job;
   onReset: () => void;
   onOpenReceipt?: (job: Job) => void;
+  onOpenEShram?: (worker: Worker) => void;
+  allWorkers?: Worker[];
+  candidates?: Candidate[];
 }) {
   const { t, language } = useLanguage();
   const latestOffer = [...job.offerLog].reverse().find((o) => o.outcome === "offered" || o.outcome === "accepted");
-  const acceptedWorker = job.offerLog.find((o) => o.outcome === "accepted") ?? latestOffer;
+  const acceptedWorkerEntry = job.offerLog.find((o) => o.outcome === "accepted") ?? latestOffer;
+  const targetWorkerId = job.assignedWorkerId || job.currentOfferWorkerId || latestOffer?.workerId;
+
+  const matchedCandidate = candidates.find((c) => c.worker.id === targetWorkerId);
+  const activeWorker = allWorkers.find((w) => w.id === targetWorkerId) || matchedCandidate?.worker;
+
+  const isMatching = job.status === "matching";
+  const isOffered = job.status === "offered";
+  const isAccepted = job.status === "accepted";
+  const isCompleted = job.status === "completed";
+  const isNoMatch = job.status === "no_match";
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs uppercase tracking-wider font-semibold text-teal-deep">
-          {language === "hi" ? "बुकिंग स्थिति" : language === "ml" ? "ബുക്കിംഗ് സ്റ്റാറ്റസ്" : "Booking Status"}
-        </span>
-        {(job.status === "completed" || job.status === "no_match") && (
-          <button onClick={onReset} className="text-xs text-teal hover:underline font-medium cursor-pointer">
-            {language === "hi" ? "दूसरी सेवा बुक करें" : language === "ml" ? "മറ്റൊരു സേവനം ബുക്ക് ചെയ്യുക" : "Book another"}
+    <div className="space-y-4">
+      {/* Header & Reset Action */}
+      <div className="flex items-center justify-between pb-3 border-b border-paper-line/70">
+        <div className="flex items-center gap-2">
+          <span className="flex h-2.5 w-2.5 relative">
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isCompleted ? "bg-emerald-400" : isNoMatch ? "bg-red-400" : "bg-amber-400"}`}></span>
+            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isCompleted ? "bg-emerald-500" : isNoMatch ? "bg-red-500" : "bg-amber-500"}`}></span>
+          </span>
+          <span className="text-xs uppercase tracking-wider font-bold text-teal-deep">
+            {language === "hi" ? "सक्रिय बुकिंग डैशबोर्ड" : language === "ml" ? "സജീവ ബുക്കിംഗ് ഡാഷ്‌ബോർഡ്" : "Live Booking Dashboard"}
+          </span>
+          <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full font-semibold bg-teal/10 text-teal-deep border border-teal/20">
+            {job.status}
+          </span>
+        </div>
+
+        {(isCompleted || isNoMatch) && (
+          <button onClick={onReset} className="text-xs text-teal hover:underline font-semibold cursor-pointer">
+            {language === "hi" ? "दूसरी सेवा बुक करें" : language === "ml" ? "മറ്റൊരു സേവനം ബുക്ക് ചെയ്യുക" : "+ Book another service"}
           </button>
         )}
       </div>
 
-      {job.status === "matching" && (
-        <p className="text-sm">
-          {language === "hi"
-            ? "आपके सहकारी क्लस्टर में सबसे निष्पक्ष उपलब्ध श्रमिक की तलाश जारी है..."
-            : language === "ml"
-            ? "നിങ്ങളുടെ ക്ലസ്റ്ററിൽ അനുയോജ്യനായ തൊഴിലാളിയെ കണ്ടെത്തുന്നു..."
-            : "Finding the fairest available worker in your cooperative cluster…"}
-        </p>
+      {/* 4-Step Visual Progress Stepper */}
+      <div className="grid grid-cols-4 gap-2 pt-1 text-center">
+        <div className="space-y-1">
+          <div className="h-1.5 rounded-full bg-teal" />
+          <div className="text-[10px] font-bold text-teal-deep">1. Request Placed</div>
+        </div>
+        <div className="space-y-1">
+          <div className={`h-1.5 rounded-full transition-all ${!isMatching ? "bg-teal" : "bg-paper-line"}`} />
+          <div className={`text-[10px] font-bold ${!isMatching ? "text-teal-deep" : "text-ink-soft/60"}`}>
+            2. Dispatch Offered
+          </div>
+        </div>
+        <div className="space-y-1">
+          <div className={`h-1.5 rounded-full transition-all ${isAccepted || isCompleted ? "bg-teal" : "bg-paper-line"}`} />
+          <div className={`text-[10px] font-bold ${isAccepted || isCompleted ? "text-teal-deep" : "text-ink-soft/60"}`}>
+            3. En Route
+          </div>
+        </div>
+        <div className="space-y-1">
+          <div className={`h-1.5 rounded-full transition-all ${isCompleted ? "bg-emerald-600" : "bg-paper-line"}`} />
+          <div className={`text-[10px] font-bold ${isCompleted ? "text-emerald-700" : "text-ink-soft/60"}`}>
+            4. Escrow Settled
+          </div>
+        </div>
+      </div>
+
+      {/* Matching State */}
+      {isMatching && (
+        <div className="p-4 rounded-xl bg-teal/[0.04] border border-teal/15 text-sm text-teal-deep flex items-center gap-3">
+          <div className="w-5 h-5 border-2 border-teal border-t-transparent rounded-full animate-spin shrink-0" />
+          <p>
+            {language === "hi"
+              ? "आपके सहकारी क्लस्टर में सबसे निष्पक्ष उपलब्ध श्रमिक की तलाश जारी है..."
+              : language === "ml"
+              ? "നിങ്ങളുടെ ക്ലസ്റ്ററിൽ അനുയോജ്യനായ തൊഴിലാളിയെ കണ്ടെത്തുന്നു..."
+              : "Finding the fairest available worker in your cooperative cluster…"}
+          </p>
+        </div>
       )}
 
-      {job.status === "offered" && (
-        <div>
-          <p className="text-sm">
-            {language === "hi" ? (
-              <>
-                काम <strong>{latestOffer?.workerName ?? "पात्र श्रमिक"}</strong> को भेजा गया — मोबाइल (व्हाट्सएप/आईवीआर) पर स्वीकृति की प्रतीक्षा है…
-              </>
-            ) : language === "ml" ? (
-              <>
-                ഓഫർ <strong>{latestOffer?.workerName ?? "തൊഴിലാളി"}</strong> ക്ക് അയച്ചു — മൊബൈൽ (വാട്ട്സ്ആപ്പ്/വോയ്സ്) സ്ഥിരീകരണത്തിനായി കാത്തിരിക്കുന്നു…
-              </>
-            ) : (
-              <>
-                Job offered to <strong>{latestOffer?.workerName ?? "eligible worker"}</strong> — waiting for them to accept on their phone (WhatsApp / IVR)…
-              </>
-            )}
-          </p>
-          {(job.selectedSkill || job.aiMatchReason) && (
-            <div className="mt-2 text-xs bg-teal/[0.04] p-2 rounded-lg border border-teal/15 text-teal-deep space-y-0.5">
-              {job.selectedSkill && (
-                <div>🎯 <strong>Matched Micro-Skill:</strong> {job.selectedSkill}</div>
+      {/* Assigned / Offered Worker Card in Dashboard */}
+      {activeWorker && (isOffered || isAccepted || isCompleted) && (
+        <div className="rounded-xl border border-teal/25 bg-white/90 p-4 shadow-xs space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-teal text-white flex items-center justify-center font-bold text-lg shadow-2xs shrink-0 ring-2 ring-teal/20">
+                {activeWorker.name.charAt(0)}
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h4 className="font-bold text-sm text-ink">{activeWorker.name}</h4>
+                  <span className="text-[10px] font-semibold text-teal-deep bg-teal/10 px-2 py-0.5 rounded-md border border-teal/20">
+                    {activeWorker.priceTier || "Coop Member"}
+                  </span>
+                  {activeWorker.digiLockerVerified && (
+                    <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-0.5">
+                      <ShieldCheck className="w-3.5 h-3.5" /> DigiLocker
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-ink-soft flex items-center gap-2 mt-0.5">
+                  <span className="flex items-center gap-1 font-semibold text-ink">
+                    <Star className="w-3.5 h-3.5 fill-marigold text-marigold" />
+                    {activeWorker.rating}
+                  </span>
+                  <span>·</span>
+                  <span>{activeWorker.areaLabel || "Kochi, Kerala"}</span>
+                  <span>·</span>
+                  <span className="font-mono text-teal font-medium">₹{job.amount} fixed</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {onOpenEShram && (
+                <button
+                  type="button"
+                  onClick={() => onOpenEShram(activeWorker)}
+                  className="px-2.5 py-1.5 rounded-lg border border-paper-line bg-white hover:border-teal text-teal-deep text-xs font-semibold flex items-center gap-1 shadow-2xs cursor-pointer"
+                  title="View Ministry of Labour & Employment e-Shram Card"
+                >
+                  <FileText className="w-3.5 h-3.5 text-teal" />
+                  <span>e-Shram</span>
+                </button>
               )}
-              {job.aiMatchReason && (
-                <div className="text-ink-soft text-[11px]">{job.aiMatchReason}</div>
+
+              {activeWorker.phone && (
+                <a
+                  href={`tel:${activeWorker.phone}`}
+                  className="px-2.5 py-1.5 rounded-lg bg-teal text-white text-xs font-semibold flex items-center gap-1 shadow-2xs hover:bg-teal-deep transition-colors"
+                >
+                  <Phone className="w-3 h-3" />
+                  <span>{activeWorker.phone}</span>
+                </a>
               )}
             </div>
+          </div>
+
+          {/* Status-specific Narrative Box */}
+          {isOffered && (
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-stone-800">
+              <p>
+                {language === "hi" ? (
+                  <>काम <strong>{activeWorker.name}</strong> को भेजा गया — मोबाइल (व्हाट्सएप/आईवीआर) पर स्वीकृति की प्रतीक्षा है…</>
+                ) : language === "ml" ? (
+                  <>ഓഫർ <strong>{activeWorker.name}</strong> ക്ക് അയച്ചു — മൊബൈൽ (വാട്ട്സ്ആപ്പ്/വോയ്സ്) സ്ഥിരീകരണത്തിനായി കാത്തിരിക്കുന്നു…</>
+                ) : (
+                  <>Job offered to <strong>{activeWorker.name}</strong> — waiting for them to accept on their phone (WhatsApp / IVR)…</>
+                )}
+              </p>
+              <div className="mt-2">
+                <Link
+                  href="/worker"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-teal text-paper px-3 py-1 text-xs font-medium hover:bg-teal-deep shadow-xs transition-colors"
+                >
+                  {language === "hi"
+                    ? "श्रमिक स्वीकृति सिम्युलेट करें (श्रमिक दृश्य खोलें) →"
+                    : language === "ml"
+                    ? "തൊഴിലാളി സ്വീകരിക്കുന്നത് കാണുക (വർക്കർ പേജ്) →"
+                    : "Simulate Worker Acceptance (Open Worker View) →"}
+                </Link>
+              </div>
+            </div>
           )}
-          <div className="mt-3 flex items-center gap-2">
-            <Link
-              href="/worker"
-              className="inline-flex items-center gap-1.5 rounded-full bg-teal text-paper px-3.5 py-1.5 text-xs font-medium hover:bg-teal-deep shadow-xs transition-colors"
-            >
-              {language === "hi"
-                ? "श्रमिक स्वीकृति सिम्युलेट करें (श्रमिक दृश्य खोलें) →"
-                : language === "ml"
-                ? "തൊഴിലാളി സ്വീകരിക്കുന്നത് കാണുക (വർക്കർ പേജ്) →"
-                : "Simulate Worker Acceptance (Open Worker View) →"}
-            </Link>
+
+          {isAccepted && (
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-stone-800">
+              <p>
+                {language === "hi" ? (
+                  <><strong>{activeWorker.name}</strong> ने आपका काम स्वीकार कर लिया है और रवाना हो चुके हैं। फिक्स्ड सहकारी दर: <strong>₹{job.amount}</strong>।</>
+                ) : language === "ml" ? (
+                  <><strong>{activeWorker.name}</strong> ജോലി സ്വീകരിച്ചു, ഉടൻ എത്തിച്ചേരും. സ്ഥിര നിരക്ക്: <strong>₹{job.amount}</strong>.</>
+                ) : (
+                  <><strong>{activeWorker.name}</strong> accepted your booking and is on the way. Fixed cooperative rate: <strong>₹{job.amount}</strong>.</>
+                )}
+              </p>
+              <div className="mt-2">
+                <Link
+                  href="/worker"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-marigold text-teal-deep px-3 py-1 text-xs font-medium hover:bg-marigold-deep shadow-xs transition-colors"
+                >
+                  {language === "hi"
+                    ? "काम पूरा होना सिम्युलेट करें (श्रमिक दृश्य में) →"
+                    : language === "ml"
+                    ? "ജോലി പൂർത്തിയാക്കുന്നത് കാണുക (വർക്കർ പേജ്) →"
+                    : "Simulate Completing Job in Worker View →"}
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {isCompleted && (
+            <div className="p-3 rounded-lg bg-emerald-700/10 border border-emerald-700/20 text-xs text-stone-800">
+              <p className="font-semibold text-emerald-900">
+                {language === "hi"
+                  ? `सेवा संपन्न! एस्क्रो द्वारा सुरक्षित भुगतान। ₹${(job.amount * 0.015).toFixed(2)} (1.5%) स्वतः सहकारी स्वास्थ्य कल्याण कोष में जमा हो गए।`
+                  : language === "ml"
+                  ? `സേവനം പൂർത്തിയായി! ₹${(job.amount * 0.015).toFixed(2)} (1.5%) തുക സഹകരണ ക്ഷേമനിധിയിലേക്ക് മാറ്റി.`
+                  : `Service completed and paid via escrow! ₹${(job.amount * 0.015).toFixed(2)} (1.5%) went to the cooperative welfare pool automatically.`}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {onOpenReceipt && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenReceipt(job)}
+                    className="rounded-full bg-emerald-700 text-white px-3 py-1 text-xs font-semibold hover:bg-emerald-800 shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>{language === "hi" ? "सहकारी एस्क्रो रसीद देखें" : language === "ml" ? "എസ്ക്രോ രസീത് കാണുക" : "View Escrow Receipt"}</span>
+                  </button>
+                )}
+                <Link
+                  href="/admin"
+                  className="text-xs text-teal hover:underline font-medium"
+                >
+                  {language === "hi"
+                    ? "कल्याण कोष व एस्क्रो खाता देखें →"
+                    : language === "ml"
+                    ? "ക്ഷേമനിധി ലെഡ്ജർ പരിശോധിക്കുക →"
+                    : "View Welfare Pool & Escrow in Admin Ledger →"}
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* Transparent Escrow Split Ledger Row */}
+          <div className="pt-2 border-t border-paper-line/60 flex flex-wrap items-center justify-between text-[11px] text-ink-soft font-mono">
+            <span>Coop Protected Total: <strong>₹{job.amount}</strong></span>
+            <span>Worker Livelihood (98.5%): <strong className="text-emerald-700">₹{(job.amount * 0.985).toFixed(2)}</strong></span>
+            <span>Welfare Fund (1.5%): <strong className="text-teal">₹{(job.amount * 0.015).toFixed(2)}</strong></span>
           </div>
         </div>
       )}
 
-      {job.status === "accepted" && (
-        <div>
-          <p className="text-sm">
-            {language === "hi" ? (
-              <>
-                <strong>{acceptedWorker?.workerName ?? "श्रमिक"}</strong> ने आपका काम स्वीकार कर लिया है और रवाना हो चुके हैं। फिक्स्ड सहकारी दर: <strong>₹{job.amount}</strong>।
-              </>
-            ) : language === "ml" ? (
-              <>
-                <strong>{acceptedWorker?.workerName ?? "തൊഴിലാളി"}</strong> ജോലി സ്വീകരിച്ചു, ഉടൻ എത്തിച്ചേരും. സ്ഥിര നിരക്ക്: <strong>₹{job.amount}</strong>.
-              </>
-            ) : (
-              <>
-                <strong>{acceptedWorker?.workerName ?? "Worker"}</strong> accepted your booking and is on the way. Fixed cooperative rate: <strong>₹{job.amount}</strong>.
-              </>
-            )}
-          </p>
-          <div className="mt-3 flex items-center gap-2">
-            <Link
-              href="/worker"
-              className="inline-flex items-center gap-1.5 rounded-full bg-marigold text-teal-deep px-3.5 py-1.5 text-xs font-medium hover:bg-marigold-deep shadow-xs transition-colors"
-            >
-              {language === "hi"
-                ? "काम पूरा होना सिम्युलेट करें (श्रमिक दृश्य में) →"
-                : language === "ml"
-                ? "ജോലി പൂർത്തിയാക്കുന്നത് കാണുക (വർക്കർ പേജ്) →"
-                : "Simulate Completing Job in Worker View →"}
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {job.status === "completed" && (
-        <div>
-          <p className="text-sm text-teal-deep font-medium">
-            {language === "hi"
-              ? `सेवा संपन्न! एस्क्रो द्वारा सुरक्षित भुगतान। ₹${(job.amount * 0.015).toFixed(2)} (1.5%) स्वतः सहकारी स्वास्थ्य कल्याण कोष में जमा हो गए।`
-              : language === "ml"
-              ? `സേവനം പൂർത്തിയായി! ₹${(job.amount * 0.015).toFixed(2)} (1.5%) തുക സഹകരണ ക്ഷേമനിധിയിലേക്ക് മാറ്റി.`
-              : `Service completed and paid via escrow! ₹${(job.amount * 0.015).toFixed(2)} (1.5%) went to the cooperative welfare pool automatically.`}
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            {onOpenReceipt && (
-              <button
-                type="button"
-                onClick={() => onOpenReceipt(job)}
-                className="rounded-full bg-emerald-700 text-white px-3.5 py-1.5 text-xs font-semibold hover:bg-emerald-800 shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                {language === "hi" ? "सहकारी एस्क्रो रसीद देखें" : language === "ml" ? "എസ്ക്രോ രസീത് കാണുക" : "View Escrow Receipt"}
-              </button>
-            )}
-            <button
-              onClick={onReset}
-              className="rounded-full bg-teal text-paper px-3.5 py-1.5 text-xs font-medium hover:bg-teal-deep shadow-xs transition-colors cursor-pointer"
-            >
-              {language === "hi" ? "दूसरी सेवा बुक करें" : language === "ml" ? "മറ്റൊരു സേവനം ബുക്ക് ചെയ്യുക" : "Book Another Service"}
-            </button>
-            <Link
-              href="/admin"
-              className="text-xs text-teal hover:underline font-medium"
-            >
-              {language === "hi"
-                ? "कल्याण कोष व एस्क्रो खाता देखें →"
-                : language === "ml"
-                ? "ക്ഷേമനിധി ലെഡ്ജർ പരിശോധിക്കുക →"
-                : "View Welfare Pool & Escrow in Admin Ledger →"}
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {job.status === "no_match" && (
-        <div>
-          <p className="text-sm text-terracotta">
+      {/* No Match Fallback */}
+      {isNoMatch && (
+        <div className="p-4 rounded-xl bg-terracotta-soft/50 border border-terracotta/30 text-sm text-terracotta space-y-2">
+          <p>
             {language === "hi"
               ? "वर्तमान में कोई पात्र श्रमिक उपलब्ध नहीं है। सभी काम में व्यस्त हैं या कौशल उन्नयन में हैं।"
               : language === "ml"
               ? "നിലവിൽ തൊഴിലാളികൾ ലഭ്യമല്ല. എല്ലാവരും തിരക്കിലാണ്."
               : "No eligible worker available right now. All candidates were idle-locked or routed to upskilling."}
           </p>
-          <button onClick={onReset} className="mt-2 text-xs text-teal underline font-medium cursor-pointer">
+          <button onClick={onReset} className="text-xs text-teal underline font-medium cursor-pointer">
             {language === "hi" ? "पुनः प्रयास करें या दूसरी सेवा चुनें" : language === "ml" ? "വീണ്ടും ശ്രമിക്കുക" : "Try again or select another service"}
           </button>
         </div>
